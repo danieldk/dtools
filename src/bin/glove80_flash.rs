@@ -1,3 +1,5 @@
+use std::fs::File;
+use std::io::BufReader;
 use std::{
     ffi::OsStr,
     io,
@@ -6,6 +8,7 @@ use std::{
 };
 
 use anyhow::bail;
+use dtools::uf2::IntoU2FBlockIter;
 use itertools::Itertools;
 use xshell::Shell;
 
@@ -14,6 +17,24 @@ use xshell::Shell;
 struct PathWithCreated {
     created: SystemTime,
     path: PathBuf,
+}
+
+const GLOVE80_LH_FAMILY_ID: u32 = 0x9807B007;
+const GLOVE80_RH_FAMILY_ID: u32 = 0x9808B007;
+
+/// Check if the given firmware files have blocks for the Glove80.
+fn uf2_has_glove80_blocks<P: AsRef<Path>>(uf2_path: P) -> Result<bool, anyhow::Error> {
+    let read = BufReader::new(File::open(uf2_path)?);
+    for uf2_block in read.u2f_block_iter() {
+        let uf2_block = uf2_block?;
+        if let Some(family_id) = uf2_block.family_id() {
+            if family_id == GLOVE80_LH_FAMILY_ID || family_id == GLOVE80_RH_FAMILY_ID {
+                return Ok(true);
+            }
+        }
+    }
+
+    Ok(false)
 }
 
 /// Find the most recent firmware file.
@@ -28,6 +49,7 @@ fn most_recent_firmware(
         .read_dir(firmware_dir)?
         .into_iter()
         .filter(|path| matches!(path.extension(), Some(ext) if ext == OsStr::new("uf2")))
+        .filter(|path| uf2_has_glove80_blocks(path).unwrap_or(false))
         .map(|path| {
             let created = path.metadata()?.created()?;
             Ok::<_, io::Error>(PathWithCreated { path, created })
@@ -87,10 +109,7 @@ fn main() -> anyhow::Result<()> {
 
     let glove80_path = wait_until_exists(&glove80_paths);
 
-    eprintln!(
-        "Found `{}`, flashing...",
-        glove80_path.display()
-    );
+    eprintln!("Found `{}`, flashing...", glove80_path.display());
 
     eprintln!("Flashing...");
 

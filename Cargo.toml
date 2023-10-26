@@ -7,6 +7,10 @@ edition = "2021"
 name = "glove80-flash"
 path = "src/bin/glove80_flash.rs"
 
+[[bin]]
+name = "uf2-dump"
+path = "src/bin/uf2_dump.rs"
+
 [dependencies]
 anyhow = "1"
 itertools = "0.11"
